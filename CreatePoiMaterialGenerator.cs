@@ -1,5 +1,7 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,19 +13,12 @@ public static class CreatePoiMaterialGenerator
 
 	public static List<Shader> GetPoiyomiShaders()
 	{
-		Shader[] allShaders = Resources.FindObjectsOfTypeAll<Shader>();
-		List<Shader> poiShaders = new List<Shader>();
+		List<string> poiShaders = ShaderUtil.GetAllShaderInfo()
+					.Select(info => info.name)
+					.Where(name => !name.StartsWith("Hidden/") && name.IndexOf("poiyomi", StringComparison.CurrentCultureIgnoreCase) != -1)
+					.ToList();
 
-		foreach (Shader shader in allShaders)
-		{
-			if (shader.name.StartsWith(".poiyomi"))
-			{
-				poiShaders.Add(shader);
-				Debug.Log(shader.name);
-			}
-		}
-
-		return poiShaders;
+		return poiShaders.Select(name => Shader.Find(name)).ToList();
 	}
 
 	// add a top bar menu item to toggle this effect
@@ -82,31 +77,32 @@ public static class CreatePoiMaterialGenerator
 
 		Debug.Log("Generating Poi Material Menu");
 		List<Shader> PoiyomiShaders = GetPoiyomiShaders();
+		Debug.Log("Found " + PoiyomiShaders.Count + " Poiyomi Shaders");
 
 		string GeneratedCode = @"
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using UnityEditorInternal;
 using System.Collections.Generic;
+using System.Linq;
+using System;
 
 public static class CreatePoiMaterialMenu {
 	static Dictionary<string,Shader> PoiyomiShaders = new Dictionary<string, Shader>();
 
 	[InitializeOnLoadMethod]
-	private static void OnLoad() {
-		GetPoiyomiShaders();
-	}
+	private static void OnLoad() => LoadPoiyomiShaders();
 
-	public static void GetPoiyomiShaders()
+	public static void LoadPoiyomiShaders()
 	{
-		Shader[] allShaders = Resources.FindObjectsOfTypeAll<Shader>();
-		foreach (Shader shader in allShaders)
-		{
-			if (shader.name.StartsWith("".poiyomi""))
-			{
-				PoiyomiShaders.Add(shader.name, shader);
-			}
+		List<string> poiShaders = ShaderUtil.GetAllShaderInfo()
+					.Select(info => info.name)
+					.Where(name => !name.StartsWith(""Hidden/"") && name.IndexOf(""poiyomi"", StringComparison.CurrentCultureIgnoreCase) != -1)
+					.ToList();
+		
+		foreach(string shaderName in poiShaders) {
+			Shader shader = Shader.Find(shaderName);
+			PoiyomiShaders.Add(shaderName, shader);
 		}
 	}
 
@@ -159,6 +155,7 @@ private static void CreatePoiMaterial{i}()
 	path = GeneratePath();
 
 	AssetDatabase.CreateAsset(material, path);
+	AssetDatabase.ImportAsset(path);
 	AssetDatabase.SaveAssets();
 	AssetDatabase.Refresh();
 
@@ -175,6 +172,9 @@ private static void CreatePoiMaterial{i}()
 		// write generated code to a text file in the project
 		System.IO.File.WriteAllText(filename, GeneratedCode);
 		AssetDatabase.Refresh();
+
+		// request script reload
+		AssetDatabase.ImportAsset(filename);
 	}
 }
 #endif
